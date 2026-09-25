@@ -1,0 +1,20 @@
+{
+  "pullRequest": {
+    "owner": "lucaong",
+    "repo": "minisearch",
+    "number": 295
+  },
+  "fileReviews": [],
+  "summary": {
+    "overallScore": 0,
+    "feedback": "Analysis in progress - delegating to specialized subagents for comprehensive review"
+  },
+  "recommendations": [
+    "Awaiting analysis from code-quality-analyzer",
+    "Awaiting analysis from test-coverage-analyzer",
+    "Awaiting analysis from refactoring-suggester"
+  ],
+  "metadata": {
+    "duration": 0
+  }
+}

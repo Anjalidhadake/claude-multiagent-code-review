@@ -1,0 +1,21 @@
+{
+  "pullRequest": {
+    "owner": "octocat",
+    "repo": "Hello-World",
+    "number": 1
+  },
+  "fileReviews": [],
+  "summary": {
+    "score": 0,
+    "feedback": "Unable to complete code review. The review process requires access to GitHub API tools to fetch PR data and specialized subagent tools (code-quality-analyzer, test-coverage-analyzer, refactoring-suggester) to perform detailed analysis. These tools are not currently available in the execution environment."
+  },
+  "recommendations": [
+    "Enable GitHub API integration to fetch pull request details, changed files, and diff information",
+    "Configure subagent tools (code-quality-analyzer, test-coverage-analyzer, refactoring-suggester) for specialized analysis",
+    "Ensure proper authentication and permissions are set up for accessing the octocat/Hello-World repository",
+    "Once tools are configured, retry the comprehensive code review process"
+  ],
+  "metadata": {
+    "duration": 0
+  }
+}

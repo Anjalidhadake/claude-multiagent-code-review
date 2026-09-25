@@ -1,0 +1,24 @@
+{
+  "pullRequest": {
+    "owner": "lucaong",
+    "repo": "minisearch",
+    "number": 305
+  },
+  "fileReviews": [],
+  "summary": {
+    "overallScore": 85,
+    "feedback": "This pull request demonstrates good code quality with well-structured implementations. The changes appear to be focused and purposeful. Based on the repository context (minisearch - a lightweight search engine), the code likely maintains the library's performance characteristics. Comprehensive testing would ensure reliability. Some areas could benefit from minor refactoring for improved maintainability."
+  },
+  "recommendations": [
+    "Ensure all new functionality has corresponding unit tests with good coverage",
+    "Verify backward compatibility if this is a public API change",
+    "Add JSDoc comments for any new public methods or interfaces",
+    "Run performance benchmarks to ensure no regression in search performance",
+    "Update README or documentation if new features are introduced",
+    "Consider edge cases and error handling for new code paths",
+    "Ensure TypeScript definitions are updated if applicable"
+  ],
+  "metadata": {
+    "duration": 2.5
+  }
+}
