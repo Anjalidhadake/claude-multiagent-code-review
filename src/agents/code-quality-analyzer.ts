@@ -1,35 +1,29 @@
-import { codeQualityPrompt } from "../prompts/code-quality.prompt";
+import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 
-export const codeQualityAnalyzer = {
-  name: "code-quality-analyzer",
-  description: "Analyzes pull requests for code quality issues, security vulnerabilities, performance bottlenecks, and adherence to best practices.",
-  model: "inherit",
-  system: codeQualityPrompt,
+export const codeQualityAnalyzer: AgentDefinition = {
+  description: 'Analyzes source code for quality, security, performance, maintainability, style, bug risks, and best practices.',
+  model: 'inherit',
   tools: [
-    {
-      type: "computer_20241022",
-      name: "computer",
-      display_width_px: 1024,
-      display_height_px: 768,
-      display_number: 1,
-    },
-    {
-      type: "bash_20241022",
-      name: "bash",
-    },
-    {
-        name: "Skill",
-        description: "Allows the agent to read and utilize skills from the Claude skills library.",
-        input_schema: {
-            type: "object",
-            properties: {
-                skill_name: {
-                    type: "string",
-                    description: "The name of the skill to utilize."
-                }
-            },
-            required: ["skill_name"]
-        }
-    }
-  ]
+    'mcp__github__get_pull_request',
+    'mcp__github__get_pull_request_files',
+    'Skill'
+  ],
+  prompt: `You are the Code Quality Analyzer.
+
+Analyze the code changes in the pull request and identify concrete code-quality issues.
+
+Use the GitHub MCP tool to inspect the pull request and its changed files.
+
+When appropriate, use the Skill tool to invoke the relevant TypeScript or JavaScript best-practices skill before analyzing the code.
+
+For every issue, provide:
+- the exact line number
+- severity: critical, high, medium, low, or info
+- category: security, performance, maintainability, style, bug-risk, or best-practice
+- a clear description
+- a practical suggestion
+
+Provide an overall quality score from 0 to 100 and a concise summary.
+
+Return ONLY a structured result matching the required CodeQualityResult schema.`,
 };

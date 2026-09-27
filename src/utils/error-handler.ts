@@ -42,15 +42,7 @@ export const ErrorCodes = {
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
 
 /**
- * Retry utility with exponential backoff
- *
- * This function implements the retry pattern with exponential backoff and jitter.
- *
- * @param fn - Async function to retry
- * @param maxRetries - Maximum number of retries (default: 3)
- * @param delayMs - Base delay in milliseconds (default: 1000)
- * @returns The result of the successful function execution
- * @throws ReviewError with RETRY_EXHAUSTED code if all retries fail
+ * Retry utility with exponential backoff and jitter.
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -64,52 +56,66 @@ export async function withRetry<T>(
       return await fn();
     } catch (error) {
       lastError = error;
-      if (attempt < maxRetries) {
-        // Calculate backoff: delayMs * 2^(attempt - 1)
-        const backoff = delayMs * Math.pow(2, attempt - 1);
-        // Add jitter to prevent thundering herd
-        const jitter = Math.random() * 100;
-        const waitTime = backoff + jitter;
-        
-        // Wait for the calculated duration
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+
+      if (attempt === maxRetries) {
+        break;
       }
+
+      const backoff = delayMs * Math.pow(2, attempt - 1);
+      const jitter = Math.random() * 100;
+      const waitTime = backoff + jitter;
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, waitTime);
+      });
     }
   }
 
   throw new ReviewError(
-    'All retries exhausted',
+    'Operation failed after all retry attempts',
     ErrorCodes.RETRY_EXHAUSTED,
-    { maxRetries, lastError }
+    {
+      maxRetries,
+      lastError:
+        lastError instanceof Error
+          ? lastError.message
+          : String(lastError)
+    }
   );
 }
 
 /**
- * Wrap an async function with timeout
- *
- * This function races the provided function against a timeout.
- * Whichever completes first wins.
- *
- * @param fn - Async function to wrap
- * @param timeoutMs - Timeout in milliseconds
- * @param errorMessage - Custom error message
- * @returns The result of the function if it completes before timeout
- * @throws ReviewError with AGENT_TIMEOUT code if timeout is reached
+ * Wrap an async function with timeout.
  */
 export async function withTimeout<T>(
   fn: () => Promise<T>,
   timeoutMs: number,
   errorMessage: string = 'Operation timed out'
 ): Promise<T> {
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    setTimeout(() => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
       reject(
-        new ReviewError(errorMessage, ErrorCodes.AGENT_TIMEOUT, { timeoutMs })
+        new ReviewError(
+          errorMessage,
+          ErrorCodes.AGENT_TIMEOUT,
+          { timeoutMs }
+        )
       );
     }, timeoutMs);
   });
 
-  return Promise.race([fn(), timeoutPromise]);
+  try {
+    return await Promise.race([
+      fn(),
+      timeoutPromise
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 /**

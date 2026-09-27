@@ -1,18 +1,29 @@
+
 /**
  * Rate Limiter for API requests and token usage
  * Prevents exceeding Anthropic API rate limits
+ *
+ * This implements a token bucket algorithm with sliding window.
+ *
+ * Concepts:
+ * - Tracks requests and tokens used in the last 60 seconds (sliding window)
+ * - Limits concurrent requests to prevent overwhelming the API
+ * - Uses token estimation to prevent exceeding token-per-minute limits
  */
 
 export interface RateLimiterConfig {
+  /** Maximum requests per minute */
   maxRequestsPerMinute: number;
+  /** Maximum tokens per minute */
   maxTokensPerMinute: number;
+  /** Maximum concurrent requests */
   maxConcurrent: number;
 }
 
 export const DEFAULT_RATE_LIMITS: RateLimiterConfig = {
-  maxRequestsPerMinute: 50,      // Conservative default
-  maxTokensPerMinute: 100000,    // ~100k tokens/min
-  maxConcurrent: 5               // Max parallel requests
+  maxRequestsPerMinute: 50,
+  maxTokensPerMinute: 100000,
+  maxConcurrent: 5
 };
 
 interface RequestRecord {
@@ -20,9 +31,6 @@ interface RequestRecord {
   tokens: number;
 }
 
-/**
- * Token bucket rate limiter with sliding window
- */
 export class RateLimiter {
   private config: RateLimiterConfig;
   private requestHistory: RequestRecord[] = [];
@@ -34,31 +42,42 @@ export class RateLimiter {
   }
 
   async acquire(estimatedTokens: number = 1000): Promise<void> {
-    if (this.activeRequests >= this.config.maxConcurrent) {
-      await this.waitForSlot();
+    while (true) {
+      if (this.activeRequests >= this.config.maxConcurrent) {
+        await this.waitForSlot();
+      }
+
+      if (this.canProceed(estimatedTokens)) {
+        this.activeRequests++;
+
+        this.requestHistory.push({
+          timestamp: Date.now(),
+          tokens: estimatedTokens
+        });
+
+        return;
+      }
+
+      await this.waitForRateLimit(estimatedTokens);
     }
-
-    await this.waitForRateLimit(estimatedTokens);
-
-    this.activeRequests++;
-    this.requestHistory.push({
-      timestamp: Date.now(),
-      tokens: estimatedTokens
-    });
   }
 
   release(actualTokens?: number): void {
     this.activeRequests = Math.max(0, this.activeRequests - 1);
 
     if (actualTokens !== undefined && this.requestHistory.length > 0) {
-      const lastRequest = this.requestHistory[this.requestHistory.length - 1];
-      if (lastRequest) {
+      const lastIndex = this.requestHistory.length - 1;
+      const lastRequest = this.requestHistory[lastIndex];
+
+      if (lastRequest !== undefined) {
         lastRequest.tokens = actualTokens;
       }
     }
 
     const next = this.waitQueue.shift();
-    if (next) next();
+    if (next) {
+      next();
+    }
   }
 
   getStatus(): {
@@ -71,63 +90,86 @@ export class RateLimiter {
     this.pruneOldRecords();
 
     const requestsInWindow = this.requestHistory.length;
-    const tokensInWindow = this.requestHistory.reduce((sum, r) => sum + r.tokens, 0);
+    const tokensInWindow = this.requestHistory.reduce(
+      (sum, request) => sum + request.tokens,
+      0
+    );
 
     return {
       activeRequests: this.activeRequests,
       requestsInWindow,
       tokensInWindow,
-      availableRequests: Math.max(0, this.config.maxRequestsPerMinute - requestsInWindow),
-      availableTokens: Math.max(0, this.config.maxTokensPerMinute - tokensInWindow)
+      availableRequests: Math.max(
+        0,
+        this.config.maxRequestsPerMinute - requestsInWindow
+      ),
+      availableTokens: Math.max(
+        0,
+        this.config.maxTokensPerMinute - tokensInWindow
+      )
     };
   }
 
   canProceed(estimatedTokens: number = 1000): boolean {
     this.pruneOldRecords();
-    
+
     if (this.activeRequests >= this.config.maxConcurrent) {
       return false;
     }
 
     const requestsInWindow = this.requestHistory.length;
-    const tokensInWindow = this.requestHistory.reduce((sum, r) => sum + r.tokens, 0);
+
+    const tokensInWindow = this.requestHistory.reduce(
+      (sum, request) => sum + request.tokens,
+      0
+    );
 
     return (
       requestsInWindow < this.config.maxRequestsPerMinute &&
-      (tokensInWindow + estimatedTokens) <= this.config.maxTokensPerMinute
+      tokensInWindow + estimatedTokens <= this.config.maxTokensPerMinute
     );
   }
 
   private async waitForSlot(): Promise<void> {
-    return new Promise(resolve => {
+    await new Promise<void>((resolve) => {
       this.waitQueue.push(resolve);
     });
   }
 
-  private async waitForRateLimit(estimatedTokens: number): Promise<void> {
+  private async waitForRateLimit(
+    estimatedTokens: number
+  ): Promise<void> {
     while (!this.canProceed(estimatedTokens)) {
       this.pruneOldRecords();
-      
-      
-      const oldestRequest = this.requestHistory[0];
-      if (!oldestRequest) {
-        break; 
+
+      if (this.requestHistory.length === 0) {
+        break;
       }
-      
+
+      const oldestRequest = this.requestHistory[0];
+
+      if (!oldestRequest) {
+        break;
+      }
+
       const expirationTime = oldestRequest.timestamp + 60000;
-      const now = Date.now();
-      
-      let waitTime = expirationTime - now + 100; 
-      waitTime = Math.max(100, waitTime);
-      waitTime = Math.min(waitTime, 5000); 
-      
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      const waitTime = Math.min(
+        5000,
+        Math.max(100, expirationTime - Date.now() + 100)
+      );
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, waitTime);
+      });
     }
   }
 
   private pruneOldRecords(): void {
     const cutoff = Date.now() - 60000;
-    this.requestHistory = this.requestHistory.filter(record => record.timestamp > cutoff);
+
+    this.requestHistory = this.requestHistory.filter(
+      (request) => request.timestamp > cutoff
+    );
   }
 }
 

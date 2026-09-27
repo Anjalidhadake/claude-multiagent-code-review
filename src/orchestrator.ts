@@ -1,17 +1,27 @@
-import { Anthropic } from '@anthropic-ai/sdk';
-import { ReviewReport, ReviewReportSchema } from './types/report-types';
-import { orchestratorPrompt } from './prompts/orchestrator.prompt';
-import { codeQualityAnalyzer, testCoverageAnalyzer, refactoringSuggester } from './agents';
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+
+import type { ReviewReport } from './types/report-types.js';
+import { ReviewReportSchema } from './types/report-types.js';
+import { mcpServersConfig } from './config/mcp.config.js';
+import {
+  codeQualityAnalyzer,
+  testCoverageAnalyzer,
+  refactoringSuggester,
+} from './agents/index.js';
+import { buildOrchestratorPrompt } from './prompts/orchestrator.prompt.js';
 
 export interface OrchestratorOptions {
-  client?: any;
+  model?: string;
+  cwd?: string;
+  timeoutMs?: number;
 }
 
 export class CodeReviewOrchestrator {
-  private client: Anthropic;
+  private readonly options: OrchestratorOptions;
 
   constructor(options: OrchestratorOptions = {}) {
-    this.client = options.client || new Anthropic();
+    this.options = options;
   }
 
   async reviewPullRequest(
@@ -19,71 +29,92 @@ export class CodeReviewOrchestrator {
     repo: string,
     prNumber: number
   ): Promise<ReviewReport> {
-    try {
-      const agents = [codeQualityAnalyzer, testCoverageAnalyzer, refactoringSuggester];
-      await Promise.all(agents.map(agent => Promise.resolve(agent.name)));
+    const startTime = Date.now();
 
-      const response = await this.client.messages.create({
-        model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
-        max_tokens: 4096,
-        system: orchestratorPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: `Perform a comprehensive code review for PR #${prNumber} in the repository ${owner}/${repo}.`
-          }
-        ],
-        tools: [
-          {
-            name: 'generate_review_report',
-            description: 'Aggregates findings and generates the final structured code review report.',
-            input_schema: {
-              type: "object",
-              properties: {
-                pullRequest: {
-                  type: "object",
-                  properties: {
-                    owner: { type: "string" },
-                    repo: { type: "string" },
-                    number: { type: "number" }
-                  },
-                  required: ["owner", "repo", "number"]
-                },
-                fileReviews: { type: "array", items: { type: "object" } },
-                summary: {
-                  type: "object",
-                  properties: { 
-                    overallScore: { type: "number" }, 
-                    feedback: { type: "string" } 
-                  },
-                  required: ["overallScore", "feedback"]
-                },
-                recommendations: { type: "array", items: { type: "string" } },
-                metadata: { type: "object", properties: { duration: { type: "number" } } }
-              },
-              required: ["pullRequest", "fileReviews", "summary", "recommendations", "metadata"]
-            }
-          }
-        ],
-        tool_choice: { type: 'tool', name: 'generate_review_report' }
-      });
-
-      const toolCall = response.content.find(block => block.type === 'tool_use');
-      if (!toolCall || toolCall.type !== 'tool_use') {
-        throw new Error("The orchestrator failed to generate a structured JSON report.");
-      }
-
-      try {
-        ReviewReportSchema.parse(toolCall.input);
-      } catch (validationError) {
-        console.warn("Zod validation generated a warning, but proceeding with output extraction.");
-      }
-
-      return toolCall.input as unknown as ReviewReport;
-
-    } catch (error) {
-      console.error("Error during PR orchestration execution:", error);
-      throw error;
+    if (!owner || !repo || !Number.isInteger(prNumber) || prNumber <= 0) {
+      throw new Error('Invalid pull request information.');
     }
+
+    const prompt = buildOrchestratorPrompt(owner, repo, prNumber);
+
+    const queryResult = query({
+      prompt,
+      options: {
+        model:
+          this.options.model ||
+          process.env.ANTHROPIC_MODEL ||
+          'claude-sonnet-4-5-20250929',
+
+        cwd: this.options.cwd || process.cwd(),
+
+        mcpServers: mcpServersConfig,
+
+        agents: {
+          codeQualityAnalyzer,
+          testCoverageAnalyzer,
+          refactoringSuggester,
+        },
+
+
+
+        allowedTools: [
+          'Task',
+          'mcp__github__get_pull_request',
+          'mcp__github__get_pull_request_files',
+          'mcp__github__get_file_contents',
+          'Skill',
+        ],
+
+        outputFormat: {
+          type: 'json_schema',
+         schema: zodToJsonSchema(
+  ReviewReportSchema as any,
+  {
+    $refStrategy: 'root',
+  }
+),
+        },
+      },
+    });
+
+    let finalReport: ReviewReport | undefined;
+
+    for await (const message of queryResult) {
+      if (
+        message.type === 'result' &&
+        message.subtype === 'success' &&
+        message.structured_output
+      ) {
+        finalReport = ReviewReportSchema.parse(
+          message.structured_output
+        );
+      }
+
+      if (
+        message.type === 'result' &&
+        message.subtype !== 'success'
+      ) {
+        throw new Error(
+          `Code review failed: ${message.subtype}`
+        );
+      }
+    }
+
+    if (!finalReport) {
+      throw new Error(
+        'Code review completed without a valid structured report.'
+      );
+    }
+
+    finalReport = {
+      ...finalReport,
+      metadata: {
+        ...finalReport.metadata,
+        analyzedAt: new Date().toISOString(),
+        duration: Date.now() - startTime,
+      },
+    };
+
+    return ReviewReportSchema.parse(finalReport);
   }
 }

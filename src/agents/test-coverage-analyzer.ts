@@ -1,35 +1,37 @@
-import { testCoveragePrompt } from "../prompts/test-coverage.prompt";
+import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 
-export const testCoverageAnalyzer = {
-  name: "test-coverage-analyzer",
-  description: "Analyzes pull requests for test coverage gaps, missing assertions, and untested edge cases.",
-  model: "inherit",
-  system: testCoveragePrompt,
+export const testCoverageAnalyzer: AgentDefinition = {
+  description: 'Analyzes pull request code changes for test coverage, missing tests, untested paths, branches, edge cases, and test quality.',
+  model: 'inherit',
   tools: [
-    {
-      type: "computer_20241022",
-      name: "computer",
-      display_width_px: 1024,
-      display_height_px: 768,
-      display_number: 1,
-    },
-    {
-      type: "bash_20241022",
-      name: "bash",
-    },
-    {
-        name: "Skill",
-        description: "Allows the agent to read and utilize skills from the Claude skills library.",
-        input_schema: {
-            type: "object",
-            properties: {
-                skill_name: {
-                    type: "string",
-                    description: "The name of the skill to utilize."
-                }
-            },
-            required: ["skill_name"]
-        }
-    }
-  ]
+    'mcp__github__get_pull_request',
+    'mcp__github__get_pull_request_files',
+    'Skill',
+  ],
+  prompt: `You are the Test Coverage Analyzer.
+
+Analyze the code changes in the pull request and determine whether the changed code has adequate tests.
+
+Use the GitHub MCP tool to inspect the pull request, changed files, and relevant test files.
+
+Identify:
+- whether tests exist for the changed code
+- relevant test files
+- untested functions, classes, branches, and edge cases
+- the priority of each missing test
+- why each path should be tested
+- a concrete suggested test
+
+For every untested path, use:
+- type: function, class, branch, or edge-case
+- location
+- priority: critical, high, medium, or low
+- reasoning
+- suggestedTest
+
+Estimate coverage from 0 to 100 based on the evidence available in the pull request.
+
+Return a structured result matching the required TestCoverageResult schema.
+
+Do not invent tests or files that you cannot identify from the pull request.`,
 };

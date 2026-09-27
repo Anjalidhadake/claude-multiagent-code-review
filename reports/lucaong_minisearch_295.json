@@ -4,17 +4,226 @@
     "repo": "minisearch",
     "number": 295
   },
-  "fileReviews": [],
+  "fileReviews": [
+    {
+      "file": "src/MiniSearch.ts",
+      "codeQuality": {
+        "file": "src/MiniSearch.ts",
+        "issues": [
+          {
+            "line": 52,
+            "severity": "low",
+            "category": "style",
+            "description": "The JSDoc comment for the `prefix` property is missing proper formatting and spacing consistency with the `fuzzy` property comment",
+            "suggestion": "Add consistent spacing between properties and ensure both JSDoc comments follow the same formatting pattern"
+          },
+          {
+            "line": 1709,
+            "severity": "medium",
+            "category": "maintainability",
+            "description": "The destructuring with default values is more verbose than necessary and could benefit from a comment explaining why this pattern was chosen over object spread",
+            "suggestion": "Add an inline comment explaining that this pattern prevents explicit `undefined` values from overriding defaults, e.g., `// Use default assignment to handle explicit undefined values`"
+          },
+          {
+            "line": 52,
+            "severity": "info",
+            "category": "best-practice",
+            "description": "The @default JSDoc tags provide good documentation, but the values (0.45 and 0.375) are hardcoded in two places (here and in defaultSearchOptions), creating a maintenance risk",
+            "suggestion": "Consider referencing the actual default values in the documentation or using a const reference to ensure single source of truth"
+          },
+          {
+            "line": 1709,
+            "severity": "low",
+            "category": "performance",
+            "description": "The new destructuring pattern performs two property lookups on `defaultSearchOptions.weights` instead of spreading the object once",
+            "suggestion": "If performance is critical, consider caching the default weights object in a local variable before destructuring"
+          },
+          {
+            "line": 52,
+            "severity": "info",
+            "category": "style",
+            "description": "TypeScript object type uses inline formatting which may become harder to read if more properties are added",
+            "suggestion": "The current formatting is acceptable for two properties, but maintain this style consistently if the interface grows"
+          }
+        ],
+        "overallScore": 88,
+        "summary": "This PR makes solid improvements to type safety and handles edge cases with undefined values. The code changes are well-thought-out and solve a real usability issue. Minor improvements could be made in documentation consistency and code comments to explain the rationale for the new pattern. The changes are backward compatible and introduce no security or significant performance concerns."
+      },
+      "testCoverage": {
+        "file": "src/MiniSearch.ts",
+        "hasTests": false,
+        "testFiles": [],
+        "untestedPaths": [
+          {
+            "type": "branch",
+            "location": "src/MiniSearch.ts:1709-1711 - Partial weights with fuzzy only",
+            "priority": "critical",
+            "reasoning": "The primary purpose of this PR is to allow partial weights. When only `fuzzy` is provided, the code should use the default for `prefix`. This is a core use case that validates the entire PR's functionality.",
+            "suggestedTest": "test('should use default prefix weight when only fuzzy weight is provided', () => {\n  const miniSearch = new MiniSearch({ fields: ['title'] });\n  miniSearch.addAll([{ id: 1, title: 'prefix test document' }]);\n  const results = miniSearch.search('pre', {\n    prefix: true,\n    fuzzy: true,\n    weights: { fuzzy: 0.5 }\n  });\n  expect(results).toBeDefined();\n});"
+          },
+          {
+            "type": "branch",
+            "location": "src/MiniSearch.ts:1709-1711 - Partial weights with prefix only",
+            "priority": "critical",
+            "reasoning": "The mirror case - when only `prefix` is provided, `fuzzy` should default to 0.45. This validates bidirectional partial support.",
+            "suggestedTest": "test('should use default fuzzy weight when only prefix weight is provided', () => {\n  const miniSearch = new MiniSearch({ fields: ['title'] });\n  miniSearch.addAll([{ id: 1, title: 'fuzzy test document' }]);\n  const results = miniSearch.search('tst', {\n    prefix: true,\n    fuzzy: true,\n    weights: { prefix: 0.4 }\n  });\n  expect(results).toBeDefined();\n});"
+          },
+          {
+            "type": "edge-case",
+            "location": "src/MiniSearch.ts:1709-1711 - Explicit undefined values",
+            "priority": "high",
+            "reasoning": "The PR description explicitly mentions this scenario: ensuring that an explicit `undefined` value in the user-provided weights doesn't prevent the default weight from being used. This is the bug fix component of the PR and must be tested.",
+            "suggestedTest": "test('should use default weights when explicit undefined is provided', () => {\n  const miniSearch = new MiniSearch({ fields: ['title'] });\n  miniSearch.addAll([{ id: 1, title: 'undefined test document' }]);\n  const results = miniSearch.search('test', {\n    prefix: true,\n    fuzzy: true,\n    weights: { fuzzy: undefined, prefix: undefined }\n  });\n  const defaultResults = miniSearch.search('test', { prefix: true, fuzzy: true });\n  expect(results).toEqual(defaultResults);\n});"
+          },
+          {
+            "type": "edge-case",
+            "location": "src/MiniSearch.ts:1711 - Null weights object",
+            "priority": "medium",
+            "reasoning": "The code explicitly handles null/undefined weights with `weights || {}`. This edge case should be tested to ensure no runtime errors occur.",
+            "suggestedTest": "test('should handle null or undefined weights object gracefully', () => {\n  const miniSearch = new MiniSearch({ fields: ['title'] });\n  miniSearch.addAll([{ id: 1, title: 'null test document' }]);\n  const resultsWithNull = miniSearch.search('test', { prefix: true, fuzzy: true, weights: null });\n  const resultsWithUndefined = miniSearch.search('test', { prefix: true, fuzzy: true, weights: undefined });\n  expect(resultsWithNull).toBeDefined();\n  expect(resultsWithUndefined).toBeDefined();\n});"
+          },
+          {
+            "type": "edge-case",
+            "location": "src/MiniSearch.ts:1709-1711 - Zero values for weights",
+            "priority": "medium",
+            "reasoning": "Zero is a valid weight value that should disable fuzzy or prefix scoring. The default parameter logic must not confuse `0` with falsy values requiring defaults.",
+            "suggestedTest": "test('should respect zero as a valid weight value', () => {\n  const miniSearch = new MiniSearch({ fields: ['title'] });\n  miniSearch.addAll([{ id: 1, title: 'zero weight test' }]);\n  const results = miniSearch.search('zero', {\n    prefix: true,\n    fuzzy: true,\n    weights: { fuzzy: 0, prefix: 0.5 }\n  });\n  expect(results).toBeDefined();\n});"
+          },
+          {
+            "type": "function",
+            "location": "src/MiniSearch.ts:52-60 - TypeScript type checking",
+            "priority": "high",
+            "reasoning": "The type change is a major part of this PR. TypeScript compilation tests should verify that partial objects are accepted without type errors.",
+            "suggestedTest": "test('should accept partial weights object (type check)', () => {\n  const miniSearch = new MiniSearch({ fields: ['title'] });\n  miniSearch.search('test', { weights: { fuzzy: 0.5 } });\n  miniSearch.search('test', { weights: { prefix: 0.4 } });\n  miniSearch.search('test', { weights: {} });\n  miniSearch.search('test', { weights: { fuzzy: 0.5, prefix: 0.4 } });\n});"
+          },
+          {
+            "type": "function",
+            "location": "src/MiniSearch.ts:1709-1711 - Backward compatibility",
+            "priority": "high",
+            "reasoning": "Regression test to ensure the new implementation maintains backward compatibility when both weights are provided.",
+            "suggestedTest": "test('should maintain backward compatibility with full weights object', () => {\n  const miniSearch = new MiniSearch({ fields: ['title'] });\n  miniSearch.addAll([{ id: 1, title: 'backward compatibility test' }]);\n  const customResults = miniSearch.search('test', {\n    prefix: true,\n    fuzzy: true,\n    weights: { fuzzy: 0.6, prefix: 0.5 }\n  });\n  expect(customResults).toBeDefined();\n});"
+          }
+        ],
+        "coverageEstimate": 25,
+        "summary": "The PR makes important changes to both the type system and runtime behavior, but test coverage appears inadequate. The most critical gaps are: no tests for partial weights objects (the main feature), no tests for the explicit undefined handling (the bug fix), and no validation of default value fallback logic."
+      },
+      "refactorings": {
+        "file": "src/MiniSearch.ts",
+        "suggestions": [
+          {
+            "type": "extract-function",
+            "location": "src/MiniSearch.ts:1709-1712",
+            "impact": "medium",
+            "description": "The destructuring pattern with default values for fuzzy and prefix weights could be extracted into a reusable utility function. This would improve readability and make it easier to maintain the default weight merging logic.",
+            "before": "const {\n  fuzzy: fuzzyWeight = defaultSearchOptions.weights.fuzzy,\n  prefix: prefixWeight = defaultSearchOptions.weights.prefix\n} = weights || {}",
+            "after": "function mergeSearchWeights(weights?: { fuzzy?: number, prefix?: number }) {\n  const {\n    fuzzy: fuzzyWeight = defaultSearchOptions.weights.fuzzy,\n    prefix: prefixWeight = defaultSearchOptions.weights.prefix\n  } = weights || {}\n  return { fuzzyWeight, prefixWeight }\n}\n\nconst { fuzzyWeight, prefixWeight } = mergeSearchWeights(weights)",
+            "benefits": "Encapsulates the default merging logic in one place, makes the code self-documenting through a descriptive function name, easier to test in isolation, and provides a single location for future updates to weight merging logic."
+          },
+          {
+            "type": "modernize",
+            "location": "src/MiniSearch.ts:52-60",
+            "impact": "medium",
+            "description": "The weights object type is defined inline within SearchOptions. Creating a separate named type would improve reusability and make the type system more explicit.",
+            "before": "export type SearchOptions = {\n  weights?: {\n    /**\n     * @default 0.45\n     */\n    fuzzy?: number\n    /**\n     * @default 0.375\n     */\n    prefix?: number\n  },\n  // ... other options\n}",
+            "after": "export type SearchWeights = {\n  /**\n   * Weight for fuzzy search results\n   * @default 0.45\n   */\n  fuzzy?: number\n  /**\n   * Weight for prefix search results\n   * @default 0.375\n   */\n  prefix?: number\n}\n\nexport type SearchOptions = {\n  weights?: SearchWeights,\n  // ... other options\n}",
+            "benefits": "Improves type reusability across the codebase, makes the API more discoverable for TypeScript users, allows for easier type composition and extension, and provides a clear semantic name for the configuration object."
+          },
+          {
+            "type": "simplify",
+            "location": "src/MiniSearch.ts (type definitions and usage)",
+            "impact": "high",
+            "description": "The default values (0.45 and 0.375) are hardcoded in comments and referenced through defaultSearchOptions.weights. Creating named constants would eliminate magic numbers and provide a single source of truth.",
+            "before": "weights?: {\n  /**\n   * @default 0.45\n   */\n  fuzzy?: number\n  /**\n   * @default 0.375\n   */\n  prefix?: number\n}",
+            "after": "export const DEFAULT_FUZZY_WEIGHT = 0.45\nexport const DEFAULT_PREFIX_WEIGHT = 0.375\n\nexport const DEFAULT_SEARCH_WEIGHTS: SearchWeights = {\n  fuzzy: DEFAULT_FUZZY_WEIGHT,\n  prefix: DEFAULT_PREFIX_WEIGHT\n}\n\nweights?: {\n  /**\n   * @default DEFAULT_FUZZY_WEIGHT\n   */\n  fuzzy?: number\n  /**\n   * @default DEFAULT_PREFIX_WEIGHT\n   */\n  prefix?: number\n}",
+            "benefits": "Eliminates magic numbers and improves code maintainability, provides a single source of truth for default values, makes it easier to reference defaults in documentation and tests, and allows users to import and reference these constants when configuring search."
+          },
+          {
+            "type": "modernize",
+            "location": "src/MiniSearch.ts:1709-1712",
+            "impact": "low",
+            "description": "The current implementation uses destructuring with default values and the || {} pattern. Using nullish coalescing operator (??) would be more explicit about handling null/undefined.",
+            "before": "const {\n  fuzzy: fuzzyWeight = defaultSearchOptions.weights.fuzzy,\n  prefix: prefixWeight = defaultSearchOptions.weights.prefix\n} = weights || {}",
+            "after": "const fuzzyWeight = weights?.fuzzy ?? defaultSearchOptions.weights.fuzzy\nconst prefixWeight = weights?.prefix ?? defaultSearchOptions.weights.prefix",
+            "benefits": "More explicit about handling undefined values, uses modern JavaScript features (optional chaining and nullish coalescing), slightly more readable for developers familiar with these operators, and handles the case where weights is undefined more explicitly."
+          },
+          {
+            "type": "pattern-improvement",
+            "location": "src/MiniSearch.ts (weight processing section)",
+            "impact": "medium",
+            "description": "Adding a type guard or validation function to ensure weight values are valid numbers within an expected range would improve robustness.",
+            "before": "const {\n  fuzzy: fuzzyWeight = defaultSearchOptions.weights.fuzzy,\n  prefix: prefixWeight = defaultSearchOptions.weights.prefix\n} = weights || {}\n\n// Direct usage without validation",
+            "after": "function isValidWeight(value: unknown): value is number {\n  return typeof value === 'number' && !isNaN(value) && value >= 0\n}\n\nfunction normalizeWeight(value: number | undefined, defaultValue: number): number {\n  if (value === undefined) return defaultValue\n  if (!isValidWeight(value)) {\n    console.warn(`Invalid weight value: ${value}. Using default: ${defaultValue}`)\n    return defaultValue\n  }\n  return value\n}\n\nconst fuzzyWeight = normalizeWeight(weights?.fuzzy, defaultSearchOptions.weights.fuzzy)\nconst prefixWeight = normalizeWeight(weights?.prefix, defaultSearchOptions.weights.prefix)",
+            "benefits": "Prevents runtime errors from invalid weight values, provides better error messages for debugging, makes the code more defensive and robust, and validates user input before using it in calculations."
+          }
+        ],
+        "summary": "Several refactoring opportunities exist to improve maintainability, eliminate magic numbers, and enhance type safety. The highest impact suggestion is creating constants for default weight values to provide a single source of truth. Additional improvements include extracting the weight merging logic into a helper function and creating a named type for SearchWeights."
+      }
+    }
+  ],
   "summary": {
-    "overallScore": 0,
-    "feedback": "Analysis in progress - delegating to specialized subagents for comprehensive review"
+    "totalFiles": 1,
+    "overallScore": 88,
+    "criticalIssues": 0,
+    "highPriorityTests": 4,
+    "refactoringOpportunities": 5
   },
   "recommendations": [
-    "Awaiting analysis from code-quality-analyzer",
-    "Awaiting analysis from test-coverage-analyzer",
-    "Awaiting analysis from refactoring-suggester"
+    {
+      "priority": "critical",
+      "category": "Testing",
+      "description": "Add tests for partial weights objects (fuzzy only and prefix only). These are the core features of this PR and must be validated to ensure the implementation works as intended.",
+      "files": [
+        "src/MiniSearch.ts"
+      ]
+    },
+    {
+      "priority": "high",
+      "category": "Testing",
+      "description": "Add test for explicit undefined values in weights. The PR description specifically mentions this bug fix, and it must be validated to prevent regression.",
+      "files": [
+        "src/MiniSearch.ts"
+      ]
+    },
+    {
+      "priority": "high",
+      "category": "Refactoring",
+      "description": "Create named constants for default weight values (0.45 and 0.375) to eliminate magic numbers and provide a single source of truth. This will improve maintainability and reduce the risk of documentation drift.",
+      "files": [
+        "src/MiniSearch.ts"
+      ]
+    },
+    {
+      "priority": "medium",
+      "category": "Documentation",
+      "description": "Add an inline comment explaining why the new destructuring pattern with default values was chosen over the object spread approach. This will help future maintainers understand the design decision.",
+      "files": [
+        "src/MiniSearch.ts"
+      ]
+    },
+    {
+      "priority": "medium",
+      "category": "Refactoring",
+      "description": "Consider creating a named type (SearchWeights) for the weights configuration object to improve API discoverability and type reusability.",
+      "files": [
+        "src/MiniSearch.ts"
+      ]
+    },
+    {
+      "priority": "low",
+      "category": "Style",
+      "description": "Ensure consistent JSDoc formatting and spacing between the fuzzy and prefix property comments for better documentation consistency.",
+      "files": [
+        "src/MiniSearch.ts"
+      ]
+    }
   ],
   "metadata": {
-    "duration": 0
+    "analyzedAt": "2026-09-27T09:28:43.355Z",
+    "duration": 157583,
+    "agentVersions": {
+      "codeQualityAnalyzer": "a588527",
+      "testCoverageAnalyzer": "a2926a5",
+      "refactoringSuggester": "a840672"
+    }
   }
 }
